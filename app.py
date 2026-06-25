@@ -559,16 +559,13 @@ def display_result(result: dict):
 
 # ─── メインUI ───────────────────────────────────────────────────────────────
 def main():
-    col_title, col_ver = st.columns([5, 1])
-    with col_title:
-        st.markdown(
-            '<div style="background:#1B2F5E;padding:10px 20px;border-radius:8px;">'
-            '<span style="color:#fff;font-size:20px;font-weight:bold;">📋 登記簿 PDF パーサー</span>'
-            '<span style="color:#A8BEE0;font-size:13px;margin-left:10px;">v1.7 — Streamlit版</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-    st.write("")
+    st.markdown(
+        '<div style="background:#1B2F5E;padding:6px 16px;border-radius:6px;margin-bottom:4px;">'
+        '<span style="color:#fff;font-size:17px;font-weight:bold;">📋 登記簿 PDF パーサー</span>'
+        '<span style="color:#A8BEE0;font-size:12px;margin-left:10px;">v1.7 — Streamlit版</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     tab_single, tab_folder = st.tabs(["📄 PDFファイル（単体・複数）", "📁 フォルダ一括（ZIP）"])
 
