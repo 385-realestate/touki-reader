@@ -390,10 +390,39 @@ def display_result(result: dict):
         tanpo_groups.setdefault(key, []).append(t)
 
     def extract_no(s):
+        """第○号 / ○号 / 数字のみ など複数形式に対応"""
         if not s:
             return ""
-        m = re.search(r'第([0-9][0-9/]*)号', s)
-        return m.group(1) if m else ""
+        # 第1053号 → 1053
+        m = re.search(r'第\s*([0-9][0-9/]*)\s*号', s)
+        if m:
+            return m.group(1).strip()
+        # 1053号 → 1053
+        m = re.search(r'([0-9][0-9/]*)\s*号', s)
+        if m:
+            return m.group(1).strip()
+        # 数字のみ
+        m = re.search(r'([0-9]+)', s)
+        return m.group(1) if m else s.strip()
+
+    def find_tanpo_key(kyotan_no: str) -> str | None:
+        """共担目録番号から tanpo_groups のキーを特定（複数形式フォールバックあり）"""
+        if not kyotan_no or not tanpo_groups:
+            return None
+        # 1. 完全一致
+        if kyotan_no in tanpo_groups:
+            return kyotan_no
+        # 2. 数字部分で照合
+        digits = extract_no(kyotan_no)
+        if digits:
+            for k in tanpo_groups:
+                if extract_no(k) == digits:
+                    return k
+        # 3. 部分文字列で照合
+        for k in tanpo_groups:
+            if kyotan_no in k or k in kyotan_no:
+                return k
+        return None
 
     if otsuku_hist:
         st.markdown('<div class="section-hdr">🔒 乙区（担保権）</div>', unsafe_allow_html=True)
@@ -413,14 +442,9 @@ def display_result(result: dict):
                     st.markdown(f"**共担目録番号:** {kyotan_no}")
 
                 # 共同担保目録（抹消済みを含む全エントリで表示）
-                matched_key = None
-                if kyotan_no:
-                    digits = extract_no(kyotan_no)
-                    for k in tanpo_groups:
-                        if extract_no(k) == digits:
-                            matched_key = k
-                            break
-                elif len(otsuku_hist) == 1 and len(tanpo_groups) == 1:
+                matched_key = find_tanpo_key(kyotan_no)
+                # 乙区1件・目録1件のときはキー不問でマッチ
+                if matched_key is None and len(tanpo_groups) == 1:
                     matched_key = next(iter(tanpo_groups))
 
                 if matched_key:
