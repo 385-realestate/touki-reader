@@ -33,7 +33,9 @@ st.set_page_config(
 st.markdown("""
 <style>
 .stApp { background-color: #F4F5F8; }
-.block-container { padding-top: 1.5rem; }
+.block-container { padding-top: 0.5rem !important; }
+/* Streamlit上部バーとの余白を詰める */
+header[data-testid="stHeader"] { background: transparent; }
 .section-hdr {
     background: #1B2F5E; color: white;
     padding: 8px 16px; border-radius: 6px;
@@ -554,12 +556,16 @@ def display_result(result: dict):
 
 # ─── メインUI ───────────────────────────────────────────────────────────────
 def main():
-    st.markdown("""
-    <div style="background:#1B2F5E;padding:14px 24px;border-radius:8px;margin-bottom:20px;">
-        <span style="color:#fff;font-size:22px;font-weight:bold;">📋 登記簿 PDF パーサー</span>
-        <span style="color:#A8BEE0;font-size:14px;margin-left:12px;">v1.7 — Streamlit版</span>
-    </div>
-    """, unsafe_allow_html=True)
+    col_title, col_ver = st.columns([5, 1])
+    with col_title:
+        st.markdown(
+            '<div style="background:#1B2F5E;padding:10px 20px;border-radius:8px;">'
+            '<span style="color:#fff;font-size:20px;font-weight:bold;">📋 登記簿 PDF パーサー</span>'
+            '<span style="color:#A8BEE0;font-size:13px;margin-left:10px;">v1.7 — Streamlit版</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    st.write("")
 
     tab_single, tab_folder = st.tabs(["📄 PDFファイル（単体・複数）", "📁 フォルダ一括（ZIP）"])
 
