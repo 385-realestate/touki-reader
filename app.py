@@ -360,10 +360,17 @@ def display_result(result: dict):
             mokuteki = b.get("登記の目的", "")
             rank = b.get("順位", "")
             label = f"順位{rank}　{mokuteki}　[{status}]"
-            with st.expander(label, expanded=(status == "現在")):
+            with st.expander(label, expanded=(status in ("現在", "差押"))):
                 st.markdown(f"**受付日:** {b.get('受付年月日', '—')}")
-                owner_disp = b.get("所有者氏名", "").replace(SEP, " / ")
-                st.markdown(f"**所有者:** {owner_disp}")
+                # 差押・差押抹消は差押名義人（債権者・申立人）を表示
+                if status in ("差押", "差押抹消") or b.get("差押名義人"):
+                    meigi = b.get("差押名義人", "") or b.get("所有者氏名", "")
+                    if meigi:
+                        st.markdown(f"**差押名義人（執行者）:** {meigi.replace(SEP, ' / ')}")
+                else:
+                    owner_disp = b.get("所有者氏名", "").replace(SEP, " / ")
+                    if owner_disp:
+                        st.markdown(f"**所有者:** {owner_disp}")
                 if b.get("所有者住所"):
                     st.markdown(f"**住所:** {b['所有者住所'].replace(SEP, ' / ')}")
                 if b.get("元の氏名"):
