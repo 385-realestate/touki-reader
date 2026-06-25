@@ -400,8 +400,12 @@ def display_result(result: dict):
                 st.markdown(f"**債務者:** {e.get('債務者', '—')}")
                 st.markdown(f"**抵当権者:** {e.get('抵当権者', '—')}")
 
-                # 共同担保目録（対応するものがあれば表示）
+                # 共担目録番号を常に表示
                 kyotan_no = e.get("共担目録番号", "")
+                if kyotan_no:
+                    st.markdown(f"**共担目録番号:** {kyotan_no}")
+
+                # 共同担保目録（抹消済みを含む全エントリで表示）
                 matched_key = None
                 if kyotan_no:
                     digits = extract_no(kyotan_no)
@@ -412,10 +416,10 @@ def display_result(result: dict):
                 elif len(otsuku_hist) == 1 and len(tanpo_groups) == 1:
                     matched_key = next(iter(tanpo_groups))
 
-                if matched_key and not e.get("_is_fuki"):
-                    entries = tanpo_groups[matched_key]
+                if matched_key:
+                    tanpo_entries = tanpo_groups[matched_key]
                     with st.expander(f"　▸ 共同担保目録　{matched_key}", expanded=False):
-                        for t in entries:
+                        for t in tanpo_entries:
                             content = t.get("内容", "")
                             if t.get("状態") == "抹消済み":
                                 st.markdown(f"~~{content}~~")
