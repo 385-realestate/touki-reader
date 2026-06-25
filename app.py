@@ -7,6 +7,7 @@ import io
 import csv
 import re
 import tempfile
+import zipfile
 from pathlib import Path
 from datetime import datetime
 
@@ -173,21 +174,21 @@ def make_csv_bytes(record: dict, doc_type: str, history: dict, pdf_name: str) ->
     return buf.getvalue().encode("utf-8-sig")
 
 
-# ─── PDF解析 ────────────────────────────────────────────────────────────────
-def analyze_pdf(uploaded_file) -> dict | None:
-    suffix = Path(uploaded_file.name).suffix
+# ─── PDF解析（単ファイル） ───────────────────────────────────────────────────
+def analyze_pdf(pdf_bytes: bytes, filename: str) -> dict | None:
+    suffix = Path(filename).suffix or ".pdf"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded_file.getbuffer())
+        tmp.write(pdf_bytes)
         tmp_path = Path(tmp.name)
     try:
         fhash = file_md5(tmp_path)
         raw_text = extract_text(tmp_path)
-        doc_type = detect_type(uploaded_file.name, raw_text)
+        doc_type = detect_type(filename, raw_text)
         agent = TochiAgent() if doc_type == "tochi" else TatemonoAgent()
         result = agent.run(tmp_path, fhash)
         if result is None:
             return None
-        result["pdf_name"] = uploaded_file.name
+        result["pdf_name"] = filename
         result["doc_type"] = doc_type
         result.pop("pdf_path", None)
         return result
@@ -196,6 +197,47 @@ def analyze_pdf(uploaded_file) -> dict | None:
             tmp_path.unlink()
         except Exception:
             pass
+
+
+# ─── ZIPからPDFを展開して解析 ────────────────────────────────────────────────
+def analyze_zip(zip_file) -> list[tuple[str, dict | None]]:
+    """ZIPを展開し、PDF一覧を (ファイル名, 解析結果) で返す"""
+    results = []
+    with zipfile.ZipFile(io.BytesIO(zip_file.getvalue())) as zf:
+        pdf_names = sorted([
+            n for n in zf.namelist()
+            if n.lower().endswith(".pdf") and not n.startswith("__MACOSX")
+        ])
+        for name in pdf_names:
+            pdf_bytes = zf.read(name)
+            base_name = Path(name).name  # フォルダパスを除いたファイル名
+            result = analyze_pdf(pdf_bytes, base_name)
+            results.append((base_name, result))
+    return results
+
+
+# ─── 一括CSVをまとめて生成 ────────────────────────────────────────────────────
+def make_bulk_csv(all_results: list[dict]) -> bytes:
+    """複数解析結果をまとめて1つのCSVに"""
+    buf = io.StringIO()
+    COLUMNS = [
+        "物件フォルダ", "PDFファイル名", "不動産番号", "種別", "地目種類",
+        "所在", "地番_家屋番号", "地積_床面積",
+        "区分", "順位", "登記の目的", "受付年月日", "受付番号",
+        "所有者_関係者名", "住所", "持分", "持分数値",
+        "状態", "名称変更後", "元の氏名",
+        "債権額", "債務者", "共担目録番号",
+        "リスクフラグ", "確認済", "備考",
+    ]
+    w = csv.DictWriter(buf, fieldnames=COLUMNS, extrasaction="ignore")
+    w.writeheader()
+    for r in all_results:
+        single = make_csv_bytes(r["record"], r["doc_type"], r["history"], r["pdf_name"])
+        # ヘッダ行を除いて追記
+        rows_only = single.decode("utf-8-sig").split("\r\n", 1)
+        if len(rows_only) > 1 and rows_only[1].strip():
+            buf.write(rows_only[1])
+    return buf.getvalue().encode("utf-8-sig")
 
 
 # ─── 持分タイムライン ────────────────────────────────────────────────────────
@@ -519,28 +561,87 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    uploaded_files = st.file_uploader(
-        "登記簿PDFをアップロード（複数同時対応）",
-        type=["pdf"],
-        accept_multiple_files=True,
-        help="土地・建物の全部事項証明書PDFをアップロードしてください",
-    )
+    tab_single, tab_folder = st.tabs(["📄 PDFファイル（単体・複数）", "📁 フォルダ一括（ZIP）"])
 
-    if not uploaded_files:
-        st.info("PDFをアップロードすると自動で解析します。複数ファイルを一度にドロップすることも可能です。")
-        return
+    # ── タブ1：PDF直接アップロード ─────────────────────────────────────────
+    with tab_single:
+        uploaded_files = st.file_uploader(
+            "登記簿PDFをアップロード（複数同時対応）",
+            type=["pdf"],
+            accept_multiple_files=True,
+            help="土地・建物の全部事項証明書PDFをアップロードしてください",
+            key="pdf_uploader",
+        )
+        if not uploaded_files:
+            st.info("PDFをドロップ、またはクリックして選択してください。複数ファイル同時対応。")
+        else:
+            all_results = []
+            for uploaded_file in uploaded_files:
+                st.markdown(f"### 📄 {uploaded_file.name}")
+                with st.spinner("解析中..."):
+                    result = analyze_pdf(uploaded_file.getvalue(), uploaded_file.name)
+                if result is None:
+                    st.error("解析に失敗しました。登記簿（全部事項証明書）のPDFか確認してください。")
+                    continue
+                all_results.append(result)
+                display_result(result)
+                st.divider()
 
-    for uploaded_file in uploaded_files:
-        st.markdown(f"### 📄 {uploaded_file.name}")
-        with st.spinner(f"解析中..."):
-            result = analyze_pdf(uploaded_file)
+            # 複数ファイルのとき一括CSVダウンロード
+            if len(all_results) >= 2:
+                st.markdown("### 📦 一括CSVダウンロード")
+                bulk_csv = make_bulk_csv(all_results)
+                fname = f"touki_bulk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                st.download_button(
+                    label=f"📥 全{len(all_results)}件まとめてCSVダウンロード",
+                    data=bulk_csv,
+                    file_name=fname,
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
-        if result is None:
-            st.error("解析に失敗しました。登記簿（全部事項証明書）のPDFか確認してください。")
-            continue
+    # ── タブ2：フォルダ一括（ZIP） ────────────────────────────────────────
+    with tab_folder:
+        st.markdown("""
+        **使い方：**
+        1. 登記簿PDFが入ったフォルダを右クリック →「ZIPに圧縮」
+        2. 作成されたZIPファイルをアップロード
+        3. フォルダ内の全PDFを一括解析してまとめてCSV出力できます
+        """)
+        zip_file = st.file_uploader(
+            "ZIPファイルをアップロード",
+            type=["zip"],
+            help="PDFが複数入ったフォルダをZIP圧縮してアップロードしてください",
+            key="zip_uploader",
+        )
+        if zip_file:
+            with st.spinner("ZIPを展開して解析中..."):
+                zip_results = analyze_zip(zip_file)
 
-        display_result(result)
-        st.divider()
+            ok = [(name, r) for name, r in zip_results if r is not None]
+            ng = [name for name, r in zip_results if r is None]
+
+            st.success(f"✅ {len(ok)}件 解析成功　{'　⚠ ' + str(len(ng)) + '件 失敗' if ng else ''}")
+            if ng:
+                st.warning("解析失敗: " + "、".join(ng))
+
+            if ok:
+                # 一括CSVダウンロード
+                bulk_csv = make_bulk_csv([r for _, r in ok])
+                fname = f"touki_bulk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                st.download_button(
+                    label=f"📥 全{len(ok)}件まとめてCSVダウンロード",
+                    data=bulk_csv,
+                    file_name=fname,
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+
+                # 個別結果を展開表示
+                st.markdown("---")
+                for name, result in ok:
+                    with st.expander(f"📄 {name}", expanded=False):
+                        display_result(result)
 
 
 if __name__ == "__main__":
