@@ -33,9 +33,12 @@ st.set_page_config(
 st.markdown("""
 <style>
 .stApp { background-color: #F4F5F8; }
-.block-container { padding-top: 0.5rem !important; }
-/* Streamlit上部バーとの余白を詰める */
-header[data-testid="stHeader"] { background: transparent; }
+.block-container { padding-top: 4rem !important; padding-bottom: 2rem !important; }
+/* Streamlit上部バーを透明化して背景に馴染ませる */
+header[data-testid="stHeader"] {
+    background-color: #F4F5F8 !important;
+    border-bottom: none !important;
+}
 .section-hdr {
     background: #1B2F5E; color: white;
     padding: 8px 16px; border-radius: 6px;
