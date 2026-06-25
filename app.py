@@ -198,6 +198,114 @@ def analyze_pdf(uploaded_file) -> dict | None:
             pass
 
 
+# ─── 持分タイムライン ────────────────────────────────────────────────────────
+def render_timeline(kouku_hist: list):
+    import math
+
+    def bare_name(s):
+        return re.sub(r'[(（][^)）]*[)）]', '', s).strip()
+
+    def parse_frac(s):
+        m = re.search(r'[(（]([0-9]+)分の([0-9]+)[)）]', s)
+        return (int(m.group(2)), int(m.group(1))) if m else None
+
+    def gcd(a, b):
+        while b:
+            a, b = b, a % b
+        return a
+
+    def lcm(a, b):
+        return a // gcd(a, b) * b
+
+    def short_date(s):
+        if not s:
+            return ""
+        era = {"明治": "M", "大正": "T", "昭和": "S", "平成": "H", "令和": "R"}
+        m = re.match(r'(明治|大正|昭和|平成|令和)([0-9]+)年([0-9]+)月([0-9]+)日', s)
+        return f"{era.get(m.group(1), m.group(1))}{m.group(2)}.{m.group(3)}.{m.group(4)}" if m else s[:10]
+
+    own_entries = [b for b in kouku_hist if b.get("状態") in ("現在", "移転前") and b.get("所有者氏名")]
+    if len(own_entries) < 2:
+        return
+
+    # 全所有者収集
+    all_persons = []
+    for e in own_entries:
+        cum = e.get("_cumulative") or {}
+        names = list(cum.keys()) if cum else [bare_name(n) for n in (e.get("所有者氏名") or "").split(SEP) if n.strip()]
+        for n in names:
+            if n and n not in all_persons:
+                all_persons.append(n)
+
+    if not all_persons:
+        return
+
+    # 共通分母
+    g_denom = 1
+    for e in own_entries:
+        cum = e.get("_cumulative") or {}
+        for n, d in cum.values():
+            g_denom = lcm(g_denom, d)
+        if not cum:
+            for o in (e.get("所有者氏名") or "").split(SEP):
+                f = parse_frac(o)
+                if f:
+                    g_denom = lcm(g_denom, f[1])
+
+    # テーブル構築
+    rows = []
+    for e in own_entries:
+        cum = e.get("_cumulative") or {}
+        row = {"順位・登記目的": f"{e.get('順位','?')}番 {(e.get('登記の目的') or '')[:12]}\n{short_date(e.get('受付年月日',''))}"}
+        total_n = 0
+        has_frac = False
+        for p in all_persons:
+            if cum and p in cum:
+                n, d = cum[p]
+                norm = n * (g_denom // d)
+                total_n += norm
+                has_frac = True
+                row[p] = f"{g_denom}分の{norm}" if g_denom > 1 else "全部"
+            else:
+                owner_str = e.get("所有者氏名") or ""
+                matched = next((o for o in owner_str.split(SEP) if bare_name(o) == p), None)
+                if matched:
+                    f = parse_frac(matched)
+                    if f:
+                        norm = f[0] * (g_denom // f[1])
+                        total_n += norm
+                        has_frac = True
+                        row[p] = f"{g_denom}分の{norm}" if g_denom > 1 else "全部"
+                    else:
+                        row[p] = "全部"
+                else:
+                    row[p] = "—"
+        row["合計"] = f"{g_denom}分の{total_n}" if has_frac else "—"
+        rows.append(row)
+
+    # 現在所有者サマリー行
+    cur_e = next((e for e in reversed(own_entries) if e.get("状態") == "現在"), None)
+    if cur_e:
+        cum = cur_e.get("_cumulative") or {}
+        sum_row = {"順位・登記目的": "【現在の所有者】"}
+        total_cur = 0
+        for p in all_persons:
+            if p in cum:
+                n, d = cum[p]
+                norm = n * (g_denom // d)
+                total_cur += norm
+                sum_row[p] = f"{g_denom}分の{norm}" if g_denom > 1 else "全部"
+            else:
+                sum_row[p] = "—"
+        sum_row["合計"] = f"{g_denom}分の{total_cur}" if g_denom > 1 else "全部"
+        rows.append(sum_row)
+
+    import pandas as pd
+    df = pd.DataFrame(rows)
+    st.markdown('<div class="section-hdr">📊 持分タイムライン</div>', unsafe_allow_html=True)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
 # ─── 結果表示 ───────────────────────────────────────────────────────────────
 def display_result(result: dict):
     record = result.get("record", {})
@@ -251,7 +359,6 @@ def display_result(result: dict):
             status = b.get("状態", "")
             mokuteki = b.get("登記の目的", "")
             rank = b.get("順位", "")
-            badge = {"現在": "badge-green", "抹消済み": "badge-gray"}.get(status, "badge-orange")
             label = f"順位{rank}　{mokuteki}　[{status}]"
             with st.expander(label, expanded=(status == "現在")):
                 st.markdown(f"**受付日:** {b.get('受付年月日', '—')}")
@@ -262,8 +369,25 @@ def display_result(result: dict):
                 if b.get("元の氏名"):
                     st.markdown(f"**元の氏名:** {b['元の氏名']}")
 
-    # 乙区（担保権）履歴
+        # 持分タイムライン（移転が2件以上のとき）
+        render_timeline(kouku_hist)
+
+    # 乙区（担保権）履歴 + 共同担保目録
     otsuku_hist = history.get("otsuku", [])
+    tanpo_list = history.get("tanpo", [])
+
+    # 共担目録を記号でグループ化
+    tanpo_groups: dict = {}
+    for t in tanpo_list:
+        key = t.get("記号及び番号", "不明")
+        tanpo_groups.setdefault(key, []).append(t)
+
+    def extract_no(s):
+        if not s:
+            return ""
+        m = re.search(r'第([0-9][0-9/]*)号', s)
+        return m.group(1) if m else ""
+
     if otsuku_hist:
         st.markdown('<div class="section-hdr">🔒 乙区（担保権）</div>', unsafe_allow_html=True)
         for e in otsuku_hist:
@@ -275,6 +399,28 @@ def display_result(result: dict):
                 st.markdown(f"**債権額:** {e.get('債権額', '—')}")
                 st.markdown(f"**債務者:** {e.get('債務者', '—')}")
                 st.markdown(f"**抵当権者:** {e.get('抵当権者', '—')}")
+
+                # 共同担保目録（対応するものがあれば表示）
+                kyotan_no = e.get("共担目録番号", "")
+                matched_key = None
+                if kyotan_no:
+                    digits = extract_no(kyotan_no)
+                    for k in tanpo_groups:
+                        if extract_no(k) == digits:
+                            matched_key = k
+                            break
+                elif len(otsuku_hist) == 1 and len(tanpo_groups) == 1:
+                    matched_key = next(iter(tanpo_groups))
+
+                if matched_key and not e.get("_is_fuki"):
+                    entries = tanpo_groups[matched_key]
+                    with st.expander(f"　▸ 共同担保目録　{matched_key}", expanded=False):
+                        for t in entries:
+                            content = t.get("内容", "")
+                            if t.get("状態") == "抹消済み":
+                                st.markdown(f"~~{content}~~")
+                            else:
+                                st.markdown(f"- {content}")
     else:
         st.success("乙区なし（担保権・抵当権の記録なし）")
 
