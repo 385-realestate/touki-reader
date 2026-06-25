@@ -355,26 +355,64 @@ def display_result(result: dict):
     kouku_hist = history.get("kouku", [])
     if kouku_hist:
         st.markdown('<div class="section-hdr">📋 甲区（所有権）</div>', unsafe_allow_html=True)
-        for b in kouku_hist:
+
+        # 差押エントリをグループ化（差押＋対応する差押抹消を同一枠に）
+        def kouku_entry_block(b: dict):
+            """1エントリ分の内容を描画"""
             status = b.get("状態", "")
+            st.markdown(f"**受付日:** {b.get('受付年月日', '—')}")
+            if status in ("差押", "差押抹消") or b.get("差押名義人"):
+                meigi = b.get("差押名義人", "") or b.get("所有者氏名", "")
+                if meigi:
+                    st.markdown(f"**差押名義人（執行者）:** {meigi.replace(SEP, ' / ')}")
+            else:
+                owner_disp = b.get("所有者氏名", "").replace(SEP, " / ")
+                if owner_disp:
+                    st.markdown(f"**所有者:** {owner_disp}")
+            if b.get("所有者住所"):
+                st.markdown(f"**住所:** {b['所有者住所'].replace(SEP, ' / ')}")
+            if b.get("元の氏名"):
+                st.markdown(f"**元の氏名:** {b['元の氏名']}")
+
+        # 差押抹消が参照する順位番号を抽出
+        def ref_rank(mokuteki: str) -> str:
+            m = re.match(r'([0-9]+)番', mokuteki or "")
+            return m.group(1) if m else ""
+
+        handled = set()
+        for idx, b in enumerate(kouku_hist):
+            if idx in handled:
+                continue
+            status = b.get("状態", "")
+            rank = str(b.get("順位", ""))
             mokuteki = b.get("登記の目的", "")
-            rank = b.get("順位", "")
-            label = f"順位{rank}　{mokuteki}　[{status}]"
-            with st.expander(label, expanded=(status in ("現在", "差押"))):
-                st.markdown(f"**受付日:** {b.get('受付年月日', '—')}")
-                # 差押・差押抹消は差押名義人（債権者・申立人）を表示
-                if status in ("差押", "差押抹消") or b.get("差押名義人"):
-                    meigi = b.get("差押名義人", "") or b.get("所有者氏名", "")
-                    if meigi:
-                        st.markdown(f"**差押名義人（執行者）:** {meigi.replace(SEP, ' / ')}")
+
+            if status == "差押":
+                # 対応する差押抹消を探す
+                pair = [j for j, bj in enumerate(kouku_hist)
+                        if j != idx and bj.get("状態") == "差押抹消"
+                        and ref_rank(bj.get("登記の目的", "")) == rank]
+                if pair:
+                    pair_idx = pair[0]
+                    bj = kouku_hist[pair_idx]
+                    handled.add(idx)
+                    handled.add(pair_idx)
+                    label = f"順位{rank}　{mokuteki} → 抹消済み　[差押→抹消]"
+                    with st.expander(label, expanded=False):
+                        st.markdown("**🔴 差押登記**")
+                        kouku_entry_block(b)
+                        st.markdown("---")
+                        st.markdown(f"**✅ 差押抹消　順位{bj.get('順位','')}**")
+                        kouku_entry_block(bj)
                 else:
-                    owner_disp = b.get("所有者氏名", "").replace(SEP, " / ")
-                    if owner_disp:
-                        st.markdown(f"**所有者:** {owner_disp}")
-                if b.get("所有者住所"):
-                    st.markdown(f"**住所:** {b['所有者住所'].replace(SEP, ' / ')}")
-                if b.get("元の氏名"):
-                    st.markdown(f"**元の氏名:** {b['元の氏名']}")
+                    handled.add(idx)
+                    with st.expander(f"順位{rank}　{mokuteki}　[差押・有効]", expanded=True):
+                        kouku_entry_block(b)
+            else:
+                handled.add(idx)
+                label = f"順位{rank}　{mokuteki}　[{status}]"
+                with st.expander(label, expanded=(status == "現在")):
+                    kouku_entry_block(b)
 
         # 持分タイムライン（移転が2件以上のとき）
         render_timeline(kouku_hist)
