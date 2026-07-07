@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 
 import streamlit as st
+from streamlit_js_eval import streamlit_js_eval
 
 # scriptsパスを追加（ローカル・Streamlit Cloud両対応）
 SCRIPTS_DIR = Path(__file__).parent / "scripts"
@@ -29,6 +30,70 @@ st.set_page_config(
     page_icon="📋",
     layout="wide",
 )
+
+# ── パスワード認証（localStorage永続化）──────────────────────
+AUTH_TOKEN = "touki_auth_ok"
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "save_token" not in st.session_state:
+    st.session_state.save_token = False
+
+# ログイン成功後の次レンダリングでlocalStorageに保存
+# （st.rerun()より前に実行するとJSが走る前にページが切り替わるため分離）
+if st.session_state.save_token:
+    streamlit_js_eval(
+        js_expressions=f"localStorage.setItem('auth_token', '{AUTH_TOKEN}')",
+        key="save_auth"
+    )
+    st.session_state.save_token = False
+
+# localStorageに認証済みトークンがあれば自動ログイン
+if not st.session_state.authenticated:
+    saved = streamlit_js_eval(
+        js_expressions="localStorage.getItem('auth_token')",
+        key="check_auth"
+    )
+    if saved == AUTH_TOKEN:
+        st.session_state.authenticated = True
+
+if not st.session_state.authenticated:
+    st.markdown("""
+    <style>
+    .login-wrap {
+        max-width: 420px;
+        margin: 80px auto 0;
+        padding: 40px 36px;
+        background: #1B2F5E;
+        border-radius: 12px;
+        text-align: center;
+        color: #fff;
+    }
+    .login-wrap h2 { font-size: 1.5rem; margin-bottom: 4px; }
+    .login-wrap p  { font-size: 0.85rem; color: #b0bec5; margin-bottom: 24px; }
+    .stTextInput [data-baseweb="input"] + div,
+    small.st-emotion-cache-1dp5vir,
+    [data-testid="InputInstructions"] { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
+    #MainMenu, header, footer { display: none !important; }
+    .block-container { max-width: 480px !important; padding-top: 0 !important; }
+    </style>
+    <div class="login-wrap">
+      <h2>📋 登記簿 PDF パーサー</h2>
+      <p>不動産登記簿PDFを自動解析・所有者チェック</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    pw = st.text_input("アクセスパスワード", type="password", placeholder="パスワードを入力")
+    if st.button("入る", use_container_width=True):
+        if pw == st.secrets["APP_PASSWORD"]:
+            st.session_state.authenticated = True
+            st.session_state.save_token = True  # 次レンダリングでlocalStorageへ保存
+            st.rerun()
+        else:
+            st.error("パスワードが違います")
+    st.stop()
+# ───────────────────────────────────────────────────────────
 
 st.markdown("""
 <style>
