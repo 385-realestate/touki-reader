@@ -60,27 +60,87 @@ if not st.session_state.authenticated:
 if not st.session_state.authenticated:
     st.markdown("""
     <style>
-    .login-wrap {
-        max-width: 420px;
-        margin: 80px auto 0;
-        padding: 40px 36px;
-        background: #1B2F5E;
-        border-radius: 12px;
-        text-align: center;
-        color: #fff;
-    }
-    .login-wrap h2 { font-size: 1.5rem; margin-bottom: 4px; }
-    .login-wrap p  { font-size: 0.85rem; color: #b0bec5; margin-bottom: 24px; }
+    @import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap');
+
+    .block-container { max-width: 640px !important; padding-top: 44px !important; }
+    [data-testid="stVerticalBlock"] { gap: 0.35rem !important; }
     .stTextInput [data-baseweb="input"] + div,
     small.st-emotion-cache-1dp5vir,
     [data-testid="InputInstructions"] { display: none !important; }
     [data-testid="stStatusWidget"] { display: none !important; }
     #MainMenu, header, footer { display: none !important; }
-    .block-container { max-width: 480px !important; padding-top: 0 !important; }
+
+    .gate-card { font-family: 'Noto Sans JP', sans-serif;
+        border-radius: 14px; box-shadow: 0 14px 36px rgba(27,47,94,0.18);
+        overflow: hidden; margin-bottom: 22px; }
+
+    .gate-band {
+        position: relative;
+        background: linear-gradient(155deg, #1B2F5E 0%, #12234A 100%);
+        padding: 40px 46px 32px; color: #fff; overflow: hidden;
+    }
+    .gate-band::after {
+        content: ""; position: absolute; inset: 0;
+        background: repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 28px);
+        pointer-events: none;
+    }
+    .gate-eyebrow {
+        font-family: 'JetBrains Mono', monospace; font-size: 11px;
+        letter-spacing: 0.16em; color: #7C93C4; margin-bottom: 10px;
+    }
+    .gate-title {
+        font-family: 'Shippori Mincho', serif; font-weight: 800;
+        font-size: 1.9rem; letter-spacing: 0.03em; margin: 0 0 6px;
+    }
+    .gate-sub { font-size: 0.85rem; color: #A8BEE0; margin: 0; }
+    .gate-seal {
+        position: absolute; top: 28px; right: 34px;
+        width: 56px; height: 56px; border-radius: 50%;
+        border: 2px solid #C6483A; box-shadow: 0 0 0 3px rgba(198,72,58,0.25) inset;
+        display: flex; align-items: center; justify-content: center;
+        color: #C6483A; font-family: 'Shippori Mincho', serif; font-weight: 800;
+        font-size: 13px; letter-spacing: 0.15em; line-height: 1.1;
+        writing-mode: vertical-rl; transform: rotate(-8deg); opacity: 0.9;
+    }
+
+    .gate-rows { background: #FBF9F4; padding: 4px 46px 14px; }
+    .gate-row {
+        display: flex; align-items: baseline; gap: 18px;
+        padding: 13px 0; border-bottom: 1px solid #E4DFD0;
+        font-size: 0.86rem; color: #3C4A63;
+    }
+    .gate-row:last-child { border-bottom: none; }
+    .gate-row .k {
+        font-family: 'Shippori Mincho', serif; font-weight: 700;
+        color: #1B2F5E; font-size: 0.82rem; flex: 0 0 42px;
+    }
+
+    .stTextInput label p {
+        font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important;
+        letter-spacing: 0.1em; color: #8A7E63 !important; text-transform: uppercase;
+    }
+    .stButton button {
+        background: #1B2F5E; color: #fff; border: none; border-radius: 8px;
+        font-family: 'Noto Sans JP', sans-serif; font-weight: 700; padding: 10px 0;
+    }
+    .stButton button:hover { background: #12234A; color: #fff; }
+    .gate-hint {
+        font-family: 'Noto Sans JP', sans-serif; font-size: 0.75rem;
+        color: #8A96AC; margin-top: 10px;
+    }
     </style>
-    <div class="login-wrap">
-      <h2>📋 登記簿 PDF パーサー</h2>
-      <p>不動産登記簿PDFを自動解析・所有者チェック</p>
+    <div class="gate-card">
+      <div class="gate-band">
+        <div class="gate-seal">認証済</div>
+        <div class="gate-eyebrow">TOUKI-READER / v1.7</div>
+        <div class="gate-title">📋 登記簿 PDF パーサー</div>
+        <p class="gate-sub">不動産登記簿PDFを自動解析・所有者チェック</p>
+      </div>
+      <div class="gate-rows">
+        <div class="gate-row"><span class="k">甲区</span><span>所有者・持分を自動抽出</span></div>
+        <div class="gate-row"><span class="k">乙区</span><span>抵当権・担保リスクを自動検知</span></div>
+        <div class="gate-row"><span class="k">出力</span><span>CSVで一括ダウンロード</span></div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -92,6 +152,7 @@ if not st.session_state.authenticated:
             st.rerun()
         else:
             st.error("パスワードが違います")
+    st.markdown('<p class="gate-hint">※初回のみ入力すれば、以降はこの端末で自動的にログインされます。</p>', unsafe_allow_html=True)
     st.stop()
 # ───────────────────────────────────────────────────────────
 
