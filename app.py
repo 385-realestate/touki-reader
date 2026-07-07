@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_js_eval import streamlit_js_eval
 
 # scriptsパスを追加（ローカル・Streamlit Cloud両対応）
@@ -734,8 +735,8 @@ def main():
 
     # ── タブ2：フォルダ一括（ZIP） ────────────────────────────────────────
     with tab_folder:
+        st.markdown("**方法A：ZIP圧縮してアップロード**")
         st.markdown("""
-        **使い方：**
         1. 登記簿PDFが入ったフォルダを右クリック →「ZIPに圧縮」
         2. 作成されたZIPファイルをアップロード
         3. フォルダ内の全PDFを一括解析してまとめてCSV出力できます
@@ -774,6 +775,67 @@ def main():
                 for name, result in ok:
                     with st.expander(f"📄 {name}", expanded=False):
                         display_result(result)
+
+        st.markdown("---")
+        st.markdown("**方法B：フォルダを直接選択（ZIP圧縮不要・Chrome/Edge推奨）**")
+        st.caption("クリックするとOSのフォルダ選択ダイアログが開き、選んだフォルダ内のPDFをまとめて読み込みます。Safari等の非対応ブラウザでは通常のファイル選択になるため、その場合は方法Aをご利用ください。")
+
+        folder_files = st.file_uploader(
+            "フォルダを直接選択してアップロード",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="folder_direct_uploader",
+        )
+        components.html("""
+        <script>
+        (function enableFolderSelect() {
+          try {
+            var doc = window.parent.document;
+            doc.querySelectorAll('[data-testid="stFileUploader"]').forEach(function(box) {
+              if ((box.innerText || '').indexOf('フォルダを直接選択してアップロード') !== -1) {
+                var input = box.querySelector('input[type="file"]');
+                if (input && !input.hasAttribute('webkitdirectory')) {
+                  input.setAttribute('webkitdirectory', '');
+                  input.setAttribute('directory', '');
+                }
+              }
+            });
+          } catch (e) {}
+          setTimeout(enableFolderSelect, 800);
+        })();
+        </script>
+        """, height=0)
+
+        if folder_files:
+            with st.spinner(f"{len(folder_files)}件のPDFを解析中..."):
+                folder_results = []
+                folder_failed = []
+                for f in folder_files:
+                    r = analyze_pdf(f.getvalue(), f.name)
+                    if r:
+                        folder_results.append(r)
+                    else:
+                        folder_failed.append(f.name)
+
+            st.success(f"✅ {len(folder_results)}件 解析成功　{'　⚠ ' + str(len(folder_failed)) + '件 失敗' if folder_failed else ''}")
+            if folder_failed:
+                st.warning("解析失敗: " + "、".join(folder_failed))
+
+            if folder_results:
+                bulk_csv = make_bulk_csv(folder_results)
+                fname = f"touki_bulk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                st.download_button(
+                    label=f"📥 全{len(folder_results)}件まとめてCSVダウンロード",
+                    data=bulk_csv,
+                    file_name=fname,
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="folder_bulk_dl",
+                )
+                st.markdown("---")
+                for r in folder_results:
+                    with st.expander(f"📄 {r['pdf_name']}", expanded=False):
+                        display_result(r)
 
 
 if __name__ == "__main__":
