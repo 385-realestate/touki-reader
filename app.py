@@ -35,8 +35,12 @@ st.set_page_config(
 # ── パスワード認証（localStorage永続化）──────────────────────
 AUTH_TOKEN = "touki_auth_ok"
 
+# SKIP_AUTH=true をシークレットに設定したデプロイ（社内用・無料版など）では
+# パスワード画面を出さずそのまま使えるようにする
+SKIP_AUTH = str(st.secrets.get("SKIP_AUTH", "")).lower() in ("1", "true", "yes")
+
 if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+    st.session_state.authenticated = SKIP_AUTH
 if "save_token" not in st.session_state:
     st.session_state.save_token = False
 
@@ -159,8 +163,10 @@ if not st.session_state.authenticated:
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap');
+
 .stApp { background-color: #F4F5F8; }
-.block-container { padding-top: 4rem !important; padding-bottom: 2rem !important; }
+.block-container { padding-top: 2.2rem !important; padding-bottom: 2rem !important; }
 /* Streamlit上部バーを透明化して背景に馴染ませる */
 header[data-testid="stHeader"] {
     background-color: #F4F5F8 !important;
@@ -184,6 +190,49 @@ header[data-testid="stHeader"] {
 .badge-green  { background:#2B8A6B; color:#fff; border-radius:3px; padding:2px 7px; font-size:13px; }
 .badge-gray   { background:#8A9ABB; color:#fff; border-radius:3px; padding:2px 7px; font-size:13px; }
 .badge-orange { background:#E07000; color:#fff; border-radius:3px; padding:2px 7px; font-size:13px; }
+
+/* ── メイン画面上部の帯 ───────────────────────────── */
+.app-band {
+    position: relative; overflow: hidden; border-radius: 12px;
+    background: linear-gradient(155deg, #1B2F5E 0%, #12234A 100%);
+    padding: 24px 30px 22px; margin-bottom: 22px;
+    box-shadow: 0 10px 26px rgba(27,47,94,0.16);
+}
+.app-band::after {
+    content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 28px);
+    pointer-events: none;
+}
+.app-band-inner {
+    position: relative; display: flex; align-items: flex-end;
+    justify-content: space-between; flex-wrap: wrap; gap: 14px;
+}
+.app-eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: 0.16em; color: #7C93C4; margin-bottom: 6px;
+}
+.app-title {
+    font-family: 'Shippori Mincho', serif; font-weight: 800;
+    font-size: 1.55rem; color: #fff; letter-spacing: 0.02em;
+}
+.app-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.app-chip {
+    font-family: 'Noto Sans JP', sans-serif; font-size: 11.5px; color: #D8E2F5;
+    border: 1px solid rgba(255,255,255,0.28); border-radius: 999px;
+    padding: 5px 13px; white-space: nowrap;
+}
+
+/* ── 未アップロード時の空状態カード ───────────────────── */
+.empty-state {
+    border: 1.5px dashed #C9D3E6; border-radius: 12px; background: #FBF9F4;
+    text-align: center; padding: 52px 24px; color: #5B6B85;
+}
+.empty-icon { font-size: 32px; margin-bottom: 10px; }
+.empty-title {
+    font-family: 'Shippori Mincho', serif; font-weight: 700;
+    font-size: 1.05rem; color: #1B2F5E; margin-bottom: 6px;
+}
+.empty-sub { font-family: 'Noto Sans JP', sans-serif; font-size: 0.85rem; color: #7A8599; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -686,13 +735,21 @@ def display_result(result: dict):
 
 # ─── メインUI ───────────────────────────────────────────────────────────────
 def main():
-    st.markdown(
-        '<div style="background:#1B2F5E;padding:6px 16px;border-radius:6px;margin-bottom:4px;">'
-        '<span style="color:#fff;font-size:17px;font-weight:bold;">📋 登記簿 PDF パーサー</span>'
-        '<span style="color:#A8BEE0;font-size:12px;margin-left:10px;">v1.7 — Streamlit版</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown("""
+    <div class="app-band">
+      <div class="app-band-inner">
+        <div>
+          <div class="app-eyebrow">TOUKI-READER / v1.7</div>
+          <div class="app-title">📋 登記簿 PDF パーサー</div>
+        </div>
+        <div class="app-chips">
+          <span class="app-chip">甲区 所有者・持分</span>
+          <span class="app-chip">乙区 担保リスク</span>
+          <span class="app-chip">CSV 一括出力</span>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     tab_single, tab_folder = st.tabs(["📄 PDFファイル（単体・複数）", "📁 フォルダ一括（ZIP）"])
 
@@ -706,7 +763,13 @@ def main():
             key="pdf_uploader",
         )
         if not uploaded_files:
-            st.info("PDFをドロップ、またはクリックして選択してください。複数ファイル同時対応。")
+            st.markdown("""
+            <div class="empty-state">
+              <div class="empty-icon">📄</div>
+              <div class="empty-title">PDFをドラッグ＆ドロップ</div>
+              <div class="empty-sub">または上のボタンからファイルを選択してください。複数ファイルの同時アップロードに対応しています。</div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
             all_results = []
             for uploaded_file in uploaded_files:
