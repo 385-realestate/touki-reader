@@ -93,6 +93,9 @@ def extract_jp_name(cells: list) -> str:
         # \u30d3\u30eb\u30fb\u30d5\u30ed\u30a2\u756a\u53f7\uff08\u4f4f\u6240\u7d9a\u304d\uff09: \u300cA\u30d3\u30eb1\u968e\u300d\u300c\u7b2c3\u30d3\u30eb\u300d\u306a\u3069
         if re.search(r'\u30d3\u30eb[0-9A-Za-z]|[0-9]+\u968e$', s):
             continue
+        # \u5efa\u7269\u540d\uff0b\u968e\u6570\uff08\u4f4f\u6240\u7d9a\u304d\uff09: \u300c\u5bb62F\u300d\u300c\u8cb8\u5bb62F\u300d\u300cB1F\u300d\u306a\u3069\u672b\u5c3e\u304c\u6570\u5b57+F
+        if re.search(r'[0-9]+[FfBb]$', s):
+            continue
         return s
     return ""
 
@@ -412,6 +415,11 @@ def parse_kouku(kouku: str) -> dict:
                     name = extract_jp_name(cells)
                     if name:
                         break
+                    # 氏名として採用されなかった行（建物名＋階数などの住所続き）は住所に連結
+                    cell_text = next((c.strip() for c in reversed(cells) if c.strip()), '')
+                    clean = re.sub(r'\s+', '', cell_text)
+                    if clean and re.search(r'[0-9]+[FfBb]$', clean):
+                        addr += clean
 
             # フォールバック：「所有者　浜松市」のように名前が同行にある場合
             if not name and addr:
