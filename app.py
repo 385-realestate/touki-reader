@@ -233,6 +233,15 @@ header[data-testid="stHeader"] {
     font-size: 1.05rem; color: #1B2F5E; margin-bottom: 6px;
 }
 .empty-sub { font-family: 'Noto Sans JP', sans-serif; font-size: 0.85rem; color: #7A8599; }
+
+/* ── 実際のドロップ領域（Streamlit標準アップローダー）を装飾状態と同じ見た目に拡張 ── */
+div[data-testid="stFileUploaderDropzone"] {
+    border: 1.5px dashed #C9D3E6 !important;
+    border-radius: 12px !important;
+    background: #FBF9F4 !important;
+    min-height: 140px !important;
+    padding: 24px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -759,21 +768,13 @@ def main():
     # ── タブ1：PDF直接アップロード ─────────────────────────────────────────
     with tab_single:
         uploaded_files = st.file_uploader(
-            "登記簿PDFをアップロード（複数同時対応）",
+            "登記簿PDFをドラッグ＆ドロップ、またはクリックして選択（複数同時対応）",
             type=["pdf"],
             accept_multiple_files=True,
             help="土地・建物の全部事項証明書PDFをアップロードしてください",
             key="pdf_uploader",
         )
-        if not uploaded_files:
-            st.markdown("""
-            <div class="empty-state">
-              <div class="empty-icon">📄</div>
-              <div class="empty-title">PDFをドラッグ＆ドロップ</div>
-              <div class="empty-sub">または上のボタンからファイルを選択してください。複数ファイルの同時アップロードに対応しています。</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
+        if uploaded_files:
             all_results = []
             for uploaded_file in uploaded_files:
                 st.markdown(f"### 📄 {uploaded_file.name}")
