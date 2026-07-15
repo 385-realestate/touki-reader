@@ -365,6 +365,9 @@ def analyze_pdf(pdf_bytes: bytes, filename: str) -> dict | None:
         fhash = file_md5(tmp_path)
         raw_text = extract_text(tmp_path)
         doc_type = detect_type(filename, raw_text)
+        if doc_type == "other":
+            # 公図・地図・法人登記簿など、所有権情報を持たないPDFは非対応として扱う
+            return None
         agent = TochiAgent() if doc_type == "tochi" else TatemonoAgent()
         result = agent.run(tmp_path, fhash)
         if result is None:
